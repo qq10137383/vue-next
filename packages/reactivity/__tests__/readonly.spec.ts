@@ -178,10 +178,7 @@ describe('reactivity/readonly', () => {
       test('should make nested values readonly', () => {
         const key1 = {}
         const key2 = {}
-        const original = new Collection([
-          [key1, {}],
-          [key2, {}]
-        ])
+        const original = new Collection([[key1, {}], [key2, {}]])
         const wrapped = readonly(original)
         expect(wrapped).not.toBe(original)
         expect(isProxy(wrapped)).toBe(true)
@@ -231,10 +228,7 @@ describe('reactivity/readonly', () => {
         test('should retrieve readonly values on iteration', () => {
           const key1 = {}
           const key2 = {}
-          const original = new Map([
-            [key1, {}],
-            [key2, {}]
-          ])
+          const original = new Map([[key1, {}], [key2, {}]])
           const wrapped: any = readonly(original)
           expect(wrapped.size).toBe(2)
           for (const [key, value] of wrapped) {
@@ -252,12 +246,7 @@ describe('reactivity/readonly', () => {
         test('should retrieve reactive + readonly values on iteration', () => {
           const key1 = {}
           const key2 = {}
-          const original = reactive(
-            new Map([
-              [key1, {}],
-              [key2, {}]
-            ])
-          )
+          const original = reactive(new Map([[key1, {}], [key2, {}]]))
           const wrapped: any = readonly(original)
           expect(wrapped.size).toBe(2)
           for (const [key, value] of wrapped) {
@@ -393,7 +382,7 @@ describe('reactivity/readonly', () => {
     const eff = effect(() => {
       roArr.includes(2)
     })
-    expect(eff.effect.deps.length).toBe(0)
+    expect(eff.deps.length).toBe(0)
   })
 
   test('readonly should track and trigger if wrapping reactive original (collection)', () => {
@@ -464,14 +453,5 @@ describe('reactivity/readonly', () => {
     expect(
       'Set operation on key "randomProperty" failed: target is readonly.'
     ).toHaveBeenWarned()
-  })
-
-  // #4986
-  test('setting a readonly object as a property of a reactive object should retain readonly proxy', () => {
-    const r = readonly({})
-    const rr = reactive({}) as any
-    rr.foo = r
-    expect(rr.foo).toBe(r)
-    expect(isReadonly(rr.foo)).toBe(true)
   })
 })

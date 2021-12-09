@@ -1,15 +1,13 @@
-import { isTracking, trackEffects, triggerEffects } from './effect'
+import { track, trigger } from './effect'
 import { TrackOpTypes, TriggerOpTypes } from './operations'
-import { isArray, hasChanged } from '@vue/shared'
-import { isProxy, toRaw, isReactive, toReactive } from './reactive'
-import type { ShallowReactiveMarker } from './reactive'
+import { isArray, isObject, hasChanged } from '@vue/shared'
+import { reactive, isProxy, toRaw, isReactive } from './reactive'
 import { CollectionTypes } from './collectionHandlers'
-import { createDep, Dep } from './dep'
 
-declare const RefSymbol: unique symbol
+export declare const RefSymbol: unique symbol
 
 export interface Ref<T = any> {
-  value: T
+  value: T  
   /**
    * Type differentiator only.
    * We need this to be in public d.ts but don't want it to show up in IDE
@@ -19,117 +17,87 @@ export interface Ref<T = any> {
   /**
    * @internal
    */
-  _shallow?: boolean
+  _shallow?: boolean  
 }
 
-type RefBase<T> = {
-  dep?: Dep
-  value: T
+export type ToRef<T> = [T] extends [Ref] ? T : Ref<UnwrapRef<T>>
+export type ToRefs<T = any> = {
+  // #2687: somehow using ToRef<T[K]> here turns the resulting type into
+  // a union of multiple Ref<*> types instead of a single Ref<* | *> type.
+  [K in keyof T]: T[K] extends Ref ? T[K] : Ref<UnwrapRef<T[K]>>
 }
 
-export function trackRefValue(ref: RefBase<any>) {
-  if (isTracking()) {
-    ref = toRaw(ref)
-    if (!ref.dep) {
-      ref.dep = createDep()
-    }
-    if (__DEV__) {
-      trackEffects(ref.dep, {
-        target: ref,
-        type: TrackOpTypes.GET,
-        key: 'value'
-      })
-    } else {
-      trackEffects(ref.dep)
-    }
-  }
-}
-
-export function triggerRefValue(ref: RefBase<any>, newVal?: any) {
-  ref = toRaw(ref)
-  if (ref.dep) {
-    if (__DEV__) {
-      triggerEffects(ref.dep, {
-        target: ref,
-        type: TriggerOpTypes.SET,
-        key: 'value',
-        newValue: newVal
-      })
-    } else {
-      triggerEffects(ref.dep)
-    }
-  }
-}
+const convert = <T extends unknown>(val: T): T =>
+  isObject(val) ? reactive(val) : val
 
 export function isRef<T>(r: Ref<T> | unknown): r is Ref<T>
 export function isRef(r: any): r is Ref {
   return Boolean(r && r.__v_isRef === true)
 }
 
-export function ref<T extends object>(
-  value: T
-): [T] extends [Ref] ? T : Ref<UnwrapRef<T>>
+export function ref<T extends object>(value: T): ToRef<T>
 export function ref<T>(value: T): Ref<UnwrapRef<T>>
 export function ref<T = any>(): Ref<T | undefined>
 export function ref(value?: unknown) {
-  return createRef(value, false)
+  return createRef(value)
 }
-
-declare const ShallowRefMarker: unique symbol
-
-export type ShallowRef<T = any> = Ref<T> & { [ShallowRefMarker]?: true }
 
 export function shallowRef<T extends object>(
   value: T
-): T extends Ref ? T : ShallowRef<T>
-export function shallowRef<T>(value: T): ShallowRef<T>
-export function shallowRef<T = any>(): ShallowRef<T | undefined>
+): T extends Ref ? T : Ref<T>
+export function shallowRef<T>(value: T): Ref<T>
+export function shallowRef<T = any>(): Ref<T | undefined>
 export function shallowRef(value?: unknown) {
   return createRef(value, true)
 }
 
-function createRef(rawValue: unknown, shallow: boolean) {
+// Ref泛型类
+class RefImpl<T> {
+  private _value: T // Ref包裹的值
+
+  public readonly __v_isRef = true
+
+  // ref会对值convert操作，对于引用类型，内部会调用reactive方法转为proxy对象
+  // 因为ref的get、set方法不会深度响应
+  constructor(private _rawValue: T, public readonly _shallow: boolean) {
+    this._value = _shallow ? _rawValue : convert(_rawValue)
+  }
+
+  // 获取值时会调用track方法收集依赖
+  get value() {
+    track(toRaw(this), TrackOpTypes.GET, 'value')
+    return this._value
+  }
+
+  // 设置值时调用trigger方法回调effect
+  set value(newVal) {
+    if (hasChanged(toRaw(newVal), this._rawValue)) {
+      this._rawValue = newVal
+      // 设置值，如果是值是引用类型，需要Reactive
+      this._value = this._shallow ? newVal : convert(newVal)
+      trigger(toRaw(this), TriggerOpTypes.SET, 'value', newVal)
+    }
+  }
+}
+
+function createRef(rawValue: unknown, shallow = false) {
   if (isRef(rawValue)) {
     return rawValue
   }
   return new RefImpl(rawValue, shallow)
 }
 
-class RefImpl<T> {
-  private _value: T
-  private _rawValue: T
-
-  public dep?: Dep = undefined
-  public readonly __v_isRef = true
-
-  constructor(value: T, public readonly _shallow: boolean) {
-    this._rawValue = _shallow ? value : toRaw(value)
-    this._value = _shallow ? value : toReactive(value)
-  }
-
-  get value() {
-    trackRefValue(this)
-    return this._value
-  }
-
-  set value(newVal) {
-    newVal = this._shallow ? newVal : toRaw(newVal)
-    if (hasChanged(newVal, this._rawValue)) {
-      this._rawValue = newVal
-      this._value = this._shallow ? newVal : toReactive(newVal)
-      triggerRefValue(this, newVal)
-    }
-  }
-}
-
+// 手动触发Ref的set操作
 export function triggerRef(ref: Ref) {
-  triggerRefValue(ref, __DEV__ ? ref.value : void 0)
+  trigger(toRaw(ref), TriggerOpTypes.SET, 'value', __DEV__ ? ref.value : void 0)
 }
 
-export function unref<T>(ref: T | Ref<T>): T {
+// ref对象解包
+export function unref<T>(ref: T): T extends Ref<infer V> ? V : T {
   return isRef(ref) ? (ref.value as any) : ref
 }
 
+// Ref自动浅解包处理器
 const shallowUnwrapHandlers: ProxyHandler<any> = {
   get: (target, key, receiver) => unref(Reflect.get(target, key, receiver)),
   set: (target, key, value, receiver) => {
@@ -143,6 +111,7 @@ const shallowUnwrapHandlers: ProxyHandler<any> = {
   }
 }
 
+// 将对象进行ref自动浅解包
 export function proxyRefs<T extends object>(
   objectWithRefs: T
 ): ShallowUnwrapRef<T> {
@@ -151,7 +120,7 @@ export function proxyRefs<T extends object>(
     : new Proxy(objectWithRefs, shallowUnwrapHandlers)
 }
 
-type CustomRefFactory<T> = (
+export type CustomRefFactory<T> = (
   track: () => void,
   trigger: () => void
 ) => {
@@ -159,9 +128,10 @@ type CustomRefFactory<T> = (
   set: (value: T) => void
 }
 
+/**
+ * 自定义Ref类，用来自定义get、set时的track、trigger操作
+ */
 class CustomRefImpl<T> {
-  public dep?: Dep = undefined
-
   private readonly _get: ReturnType<CustomRefFactory<T>>['get']
   private readonly _set: ReturnType<CustomRefFactory<T>>['set']
 
@@ -169,8 +139,8 @@ class CustomRefImpl<T> {
 
   constructor(factory: CustomRefFactory<T>) {
     const { get, set } = factory(
-      () => trackRefValue(this),
-      () => triggerRefValue(this)
+      () => track(this, TrackOpTypes.GET, 'value'),
+      () => trigger(this, TriggerOpTypes.SET, 'value')
     )
     this._get = get
     this._set = set
@@ -185,13 +155,12 @@ class CustomRefImpl<T> {
   }
 }
 
+// 创建自定义Ref
 export function customRef<T>(factory: CustomRefFactory<T>): Ref<T> {
   return new CustomRefImpl(factory) as any
 }
 
-export type ToRefs<T = any> = {
-  [K in keyof T]: ToRef<T[K]>
-}
+// Proxy对象直接子属性转Ref
 export function toRefs<T extends object>(object: T): ToRefs<T> {
   if (__DEV__ && !isProxy(object)) {
     console.warn(`toRefs() expects a reactive object but received a plain one.`)
@@ -203,6 +172,10 @@ export function toRefs<T extends object>(object: T): ToRefs<T> {
   return ret
 }
 
+// toRef、toRefs方法会将原始对象的属性封装为ObjectRefImpl，它不会处理对原始对象，
+// 而是会处理对象的的属性，原始对象必须是响应式的(Proxy)，因为其value的get、set方法实际
+// 返回了原始对象的属性值，如果原始对象不是响应式的，处理后的属性也不会有响应性。
+// 这两个方法通用用于setup函数中组件传入属性的解构操作。
 class ObjectRefImpl<T extends object, K extends keyof T> {
   public readonly __v_isRef = true
 
@@ -217,14 +190,14 @@ class ObjectRefImpl<T extends object, K extends keyof T> {
   }
 }
 
-export type ToRef<T> = [T] extends [Ref] ? T : Ref<T>
-
+// Proxy对象单个属性转Ref
 export function toRef<T extends object, K extends keyof T>(
   object: T,
   key: K
 ): ToRef<T[K]> {
-  const val = object[key]
-  return isRef(val) ? val : (new ObjectRefImpl(object, key) as any)
+  return isRef(object[key])
+    ? object[key]
+    : (new ObjectRefImpl(object, key) as any)
 }
 
 // corner case when use narrows type
@@ -252,23 +225,14 @@ type BaseTypes = string | number | boolean
 export interface RefUnwrapBailTypes {}
 
 export type ShallowUnwrapRef<T> = {
-  [K in keyof T]: T[K] extends Ref<infer V>
-    ? V
-    : // if `V` is `unknown` that means it does not extend `Ref` and is undefined
-    T[K] extends Ref<infer V> | undefined
-    ? unknown extends V
-      ? undefined
-      : V | undefined
-    : T[K]
+  [K in keyof T]: T[K] extends Ref<infer V> ? V : T[K]
 }
 
-export type UnwrapRef<T> = T extends ShallowRef<infer V>
-  ? V
-  : T extends Ref<infer V>
+export type UnwrapRef<T> = T extends Ref<infer V>
   ? UnwrapRefSimple<V>
   : UnwrapRefSimple<T>
 
-export type UnwrapRefSimple<T> = T extends
+type UnwrapRefSimple<T> = T extends
   | Function
   | CollectionTypes
   | BaseTypes
@@ -276,9 +240,36 @@ export type UnwrapRefSimple<T> = T extends
   | RefUnwrapBailTypes[keyof RefUnwrapBailTypes]
   ? T
   : T extends Array<any>
-  ? { [K in keyof T]: UnwrapRefSimple<T[K]> }
-  : T extends object & { [ShallowReactiveMarker]?: never }
-  ? {
-      [P in keyof T]: P extends symbol ? T[P] : UnwrapRef<T[P]>
-    }
-  : T
+    ? { [K in keyof T]: UnwrapRefSimple<T[K]> }
+    : T extends object ? UnwrappedObject<T> : T
+
+// Extract all known symbols from an object
+// when unwrapping Object the symbols are not `in keyof`, this should cover all the
+// known symbols
+type SymbolExtract<T> = (T extends { [Symbol.asyncIterator]: infer V }
+  ? { [Symbol.asyncIterator]: V }
+  : {}) &
+  (T extends { [Symbol.hasInstance]: infer V }
+    ? { [Symbol.hasInstance]: V }
+    : {}) &
+  (T extends { [Symbol.isConcatSpreadable]: infer V }
+    ? { [Symbol.isConcatSpreadable]: V }
+    : {}) &
+  (T extends { [Symbol.iterator]: infer V } ? { [Symbol.iterator]: V } : {}) &
+  (T extends { [Symbol.match]: infer V } ? { [Symbol.match]: V } : {}) &
+  (T extends { [Symbol.matchAll]: infer V } ? { [Symbol.matchAll]: V } : {}) &
+  (T extends { [Symbol.replace]: infer V } ? { [Symbol.replace]: V } : {}) &
+  (T extends { [Symbol.search]: infer V } ? { [Symbol.search]: V } : {}) &
+  (T extends { [Symbol.species]: infer V } ? { [Symbol.species]: V } : {}) &
+  (T extends { [Symbol.split]: infer V } ? { [Symbol.split]: V } : {}) &
+  (T extends { [Symbol.toPrimitive]: infer V }
+    ? { [Symbol.toPrimitive]: V }
+    : {}) &
+  (T extends { [Symbol.toStringTag]: infer V }
+    ? { [Symbol.toStringTag]: V }
+    : {}) &
+  (T extends { [Symbol.unscopables]: infer V }
+    ? { [Symbol.unscopables]: V }
+    : {})
+
+type UnwrappedObject<T> = { [P in keyof T]: UnwrapRef<T[P]> } & SymbolExtract<T>
