@@ -179,6 +179,12 @@ export function defineComponent<
   >
 ): DefineComponent<PropsOptions, RawBindings, D, C, M, Mixin, Extends, E, EE>
 
+/**
+ * 定义同步组件，组件选项可以是对象或者函数，对象(options)就是vue2的组件定义方法，
+ * 如果是函数，就会将函数包装为options.setup函数，组件name就是函数名
+ * @param options 
+ * @returns 
+ */
 // implementation, close to no-op
 export function defineComponent(options: unknown) {
   return isFunction(options) ? { setup: options, name: options.name } : options
