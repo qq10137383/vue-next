@@ -97,7 +97,7 @@ export function unref<T>(ref: T): T extends Ref<infer V> ? V : T {
   return isRef(ref) ? (ref.value as any) : ref
 }
 
-// Ref自动浅解包处理器
+// Ref自动浅解包处理器，设置值时使用字面值，不需要使用value
 const shallowUnwrapHandlers: ProxyHandler<any> = {
   get: (target, key, receiver) => unref(Reflect.get(target, key, receiver)),
   set: (target, key, value, receiver) => {
