@@ -111,7 +111,7 @@ const shallowUnwrapHandlers: ProxyHandler<any> = {
   }
 }
 
-// 将对象进行ref自动浅解包
+// 将对象进行ref自动浅解包，设置值时使用字面值，不需要使用value
 export function proxyRefs<T extends object>(
   objectWithRefs: T
 ): ShallowUnwrapRef<T> {
