@@ -336,7 +336,9 @@ export const setRef = (
     return
   }
 
-  // 获取ref值，如果是普通组件(STATEFUL_COMPONENT)，返回组件外部实例(proxy)
+  // 获取ref值，如果是普通组件(STATEFUL_COMPONENT)，如果setup中返回render函数
+  // 使用expose暴露出属性(会挂载到instance.exposed属性上)优先返回expose
+  // 没有expose时返回组件外部实例(proxy)
   // 否则返回dom元素(vnode.el)
   const refValue =
     vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT
