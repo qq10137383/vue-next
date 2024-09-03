@@ -145,7 +145,14 @@ export type DeepReadonly<T> = T extends Builtin
 /**
  * Creates a readonly copy of the original object. Note the returned copy is not
  * made reactive, but `readonly` can be called on an already reactive object.
- * 创建深度只读对象，只读对象不能新增、修改、删除属性，不会收集依赖(不是响应式)，没有意义
+ * 创建深度只读对象，只读对象不能新增、修改、删除属性，
+ * 如果源对象是普通对象，不会收集依赖(不是响应式)，如果源对象是响应式对象，会收集依赖
+ * 可以认为它其实是做了两层代理，第一层代理是readonly代理，它和普通对象一样不会收集依赖
+ * 但是由于它的原始对象是响应式的，第二层代理触发时会收集依赖，这是有意义的，虽然readonly返回
+ * 的对象你无法修改，似乎收集的依赖永远无法执行，但你还是可以修改原始值对象，它依然是响应式的
+ * 这时候就会触发副作用回调。see https://cn.vuejs.org/api/reactivity-core.html#readonly
+ * 无论原始值是普通对象还是响应式对象，它都返回一个新的代理副本。
+ * 
  */
 export function readonly<T extends object>(
   target: T

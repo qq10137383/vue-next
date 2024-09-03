@@ -170,6 +170,7 @@ export function h<P>(
   children?: RawChildren | RawSlots
 ): VNode
 
+// h函数仅仅是createVNode函数的包装，提供了多个重载的传参方式
 // Actual implementation
 export function h(type: any, propsOrChildren?: any, children?: any): VNode {
   const l = arguments.length

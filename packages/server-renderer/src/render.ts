@@ -87,6 +87,8 @@ export function renderComponentVNode(
   const res = setupComponent(instance, true /* isSSR */)
   const hasAsyncSetup = isPromise(res)
   const prefetches = instance.sp
+  // 服务端渲染中，如果是异步setup组件，需要等待setup执行完成后继续渲染，
+  // 如果注册了onServerPrefetch声明周期函数，需要同时等待onServerPrefetch执行完成后才继续渲染。
   if (hasAsyncSetup || prefetches) {
     let p: Promise<unknown> = hasAsyncSetup
       ? (res as Promise<void>)

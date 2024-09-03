@@ -450,7 +450,7 @@ export function createComponentInstance(
     update: null!, // will be set synchronously right after creation  // 更新函数，副作用包装的render函数
     render: null,    // 渲染函数，会在update函数中被调用，生成subTree，并收集依赖
     proxy: null,  //组件外部实例，代理对象
-    exposed: null,
+    exposed: null, // 默认情况expose为null，生成ref的时候会返回inst.proxy，如果使用expose函数暴露了属性，会优先返回exposed而不是proxy
     withProxy: null,
     effects: null,  // computed，watch副作用表(computed，watch都是基于effect实现的)，组件的render也是基于effect实现，但是存储在update中
     provides: parent ? parent.provides : Object.create(appContext.provides), //依赖注入，父元素或appContext中获取

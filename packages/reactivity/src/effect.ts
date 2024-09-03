@@ -272,7 +272,7 @@ export function trigger(
     depsMap.forEach(add)
   } else if (key === 'length' && isArray(target)) {
     // 数组长度改变，将依赖长度属性或者数组新长度以外的值的effect全部调用一遍
-    // 意思就是如果长度长度，依赖长度属性的effect调用，如果长度减小，数组变短，依赖已被删除元素的effect调用
+    // 意思就是如果长度改变，依赖长度属性的effect调用，如果长度减小，数组变短，依赖已被删除元素的effect调用
     depsMap.forEach((dep, key) => {
       if (key === 'length' || key >= (newValue as number)) {
         add(dep)
